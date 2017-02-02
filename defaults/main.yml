@@ -1,0 +1,8 @@
+vhost_user: otrs
+otrs_database: otrs
+otrs_database_user: otrs
+otrs_install_path: /opt/otrs
+otrs_user: otrs
+otrs_group: otrs
+vhost_user_home: /opt/otrs
+otrs_tar_file: "otrs.tar.bz2"

@@ -1,0 +1,163 @@
+- block:
+  - name: Postfix
+    include_role: name=postfix-smarthost
+    static: no
+  when: "postfix_relayhost is defined"
+
+- name: MySQL
+  include_role: name=mysql
+  static: no
+
+- name: Apache
+  include_role: name=apache
+  static: no
+
+- name: Vhost
+  include_role: name=vhost
+  static: no
+  vars:
+    use_perl: true
+
+- name: Set otrs folder permissions
+  file: path={{ otrs_install_path }} owner={{ otrs_user }} group={{ otrs_group }} mode=0755 state=directory
+
+- name: APT | Install dependendies
+  apt: name={{ item }}
+  with_items:
+    - libarchive-zip-perl
+    - libcrypt-eksblowfish-perl
+    - libcrypt-ssleay-perl
+    - libdbd-pg-perl
+    - libencode-hanextra-perl
+    - libio-socket-ssl-perl
+    - libjson-xs-perl
+    - libmail-imapclient-perl
+    - libio-socket-ssl-perl
+    - libnet-dns-perl
+    - libnet-ldap-perl
+    - libtemplate-perl
+    - libtemplate-perl
+    - libtext-csv-xs-perl
+    - libxml-libxml-perl
+    - libxml-libxslt-perl
+    - libxml-parser-perl
+    - libyaml-libyaml-perl
+    - libdbd-mysql-perl
+  when: ansible_pkg_mgr == "apt"
+
+- name: Fact | createdb
+  set_fact: "{{item.key}}={{item.value}}"
+  with_items:
+    - key: "createdb_dbs"
+      value: "mysql"
+    - key: "createdb_config"
+      value: "{{ vhost_directory }}/.my.cnf"
+    - key: "createdb_user"
+      value: "{{ otrs_database_user }}"
+    - key: "createdb_host"
+      value: "localhost"
+    - key: "createdb_database"
+      value: "{{ otrs_database }}"
+
+- name: Database
+  include_role: name=createdb
+  static: no
+
+- name: Check if otrs is already installed
+  stat: path={{ otrs_install_path }}/Kernel
+  register: otrs_kernel_stat
+
+- name: check if otrs installation archive exists
+  local_action: stat path={{otrs_tar_file}}
+  register: otrs_tar_file_stat
+
+- fail: msg="otrs isn't installed and installation archive not found"
+  when: not otrs_kernel_stat.stat.exists and not otrs_tar_file_stat.stat.exists
+
+- block:
+  - pause:
+      prompt: "If you press any key the installation of otrs will begin or abort with ctrl-c"
+  - name: Extract OTRS
+    unarchive: src={{ otrs_tar_file }} dest={{ otrs_install_path }} owner={{ otrs_user }} group={{ otrs_group }} extra_opts="--strip-components=1"
+  when: not otrs_kernel_stat.stat.exists
+
+- name: Check if apache config exists
+  stat: path={{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf
+  register: apache_otrs_conf
+
+- name: Copy apache configuration
+  synchronize: mode=pull src={{ otrs_install_path }}/scripts/apache2-httpd.include.conf dest={{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf
+  delegate_to: "{{inventory_hostname}}"
+  when: not apache_otrs_conf.stat.exists
+
+- name: Delete broken config from file
+  lineinfile: dest={{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf state=absent line="MaxRequestsPerChild 4000"
+
+- name: OTRS redirect to index.pl
+  copy: src=redirect_otrs.conf dest={{ apache_sites_include }}/{{ vhost_domain }}_redirect.conf
+
+- name: Check if otrs configuration already exists
+  stat: path={{ otrs_install_path }}/Kernel/Config.pm
+  register: otrs_config_stat
+
+- block:
+  - pause:
+      prompt: "The configuration file {{ otrs_install_path }}/Kernel/Config.pm doesn't exist. If you press enter I will create one, ctrc-c to abort"
+  - name: Create configuration
+    copy: remote_src=true src={{ otrs_install_path }}/Kernel/Config.pm.dist dest={{ otrs_install_path }}/Kernel/Config.pm owner={{ otrs_user }} group={{ otrs_group }} mode=0640
+  rescue:
+    - debug: msg="I will not copy the configuration file!"
+  when: not otrs_config_stat.stat.exists
+
+- name: Set otrs permissions
+  command: "{{ otrs_install_path}}/bin/otrs.SetPermissions.pl --otrs-user={{ otrs_user }} --web-group={{ otrs_group }} --skip-regex=\"^/.procmailrc\""
+
+- name: SysV | OTRS Daemon
+  template: src=sysvinit.j2 dest=/etc/init.d/otrs owner=root group=root mode=0755
+  when: ansible_service_mgr != "systemd"
+
+- name: SystemD | OTRS Daemon
+  template: src=systemd.j2 dest=/etc/systemd/system/otrs.service owner=root group=root mode=0644
+  when: ansible_service_mgr == "systemd"
+
+- name: SysV | enable otrs daemon
+  service: name=otrs enabled=yes
+  when: ansible_service_mgr != "systemd"
+
+- name: SystemD | Remove old init scripts
+  file: path=/etc/init.d/otrs state=absent
+  when: ansible_service_mgr == "systemd"
+
+- name: SystemD | enable otrs daemon
+  systemd: name=otrs daemon_reload=yes enabled=yes
+  when: ansible_service_mgr == "systemd"
+
+- name: Enable bash completion
+  lineinfile: line=". {{ otrs_install_path }}/.bash_completion" dest={{ vhost_directory }}/.bashrc
+
+- name: Check if .procmailrc exists
+  stat: path={{ otrs_install_path }}/.procmailrc
+  register: otrs_procmailrc_stat
+
+- name: Configure procmail
+  copy: src={{ otrs_install_path }}/.procmailrc.dist dest={{ otrs_install_path }}/.procmailrc remote_src=True owner=root group=root mode=0644
+  when: not otrs_procmailrc_stat.stat.exists
+
+- name: Fix .procmailrc permissions
+  file: path={{ otrs_install_path }}/.procmailrc owner=root group=root mode=0644
+
+- name: rsyslog
+  copy: src=rsyslog_otrs.conf dest=/etc/rsyslog.d/otrs.conf owner=root group=root mode=0644
+
+- name: restart services
+  service:
+   name: apache2
+   state: restarted
+  with_items:
+    - apache2
+    - mysql
+    - rsyslog
+    - otrs
+  ignore_errors: yes
+
+- debug: "msg=\"You should now be able to run the otrs installer. The database settings are:: DB Host: {{ createdb_host }} ; DB User: {{ createdb_user }} ; DB Password: {{ createdb_password }} ; DB Name: {{ createdb_database }}\""

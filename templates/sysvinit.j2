@@ -1,0 +1,59 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          otrs
+# Required-Start:    $remote_fs $syslog mysql
+# Required-Stop:     $remote_fs $syslog mysql
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start otrs daemon
+# Description:       This is a wrapper around the otrs daemon script
+### END INIT INFO
+
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+DESC="Wrapper for otrs.Daemon.pl"
+NAME=otrs.Daemon.pl
+DAEMON={{ otrs_install_path }}/bin/$NAME
+SCRIPTNAME=/etc/init.d/otrs
+
+# Exit if the package is not installed
+[ -x "$DAEMON" ] || exit 0
+
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.2-14) to ensure that this file is present
+# and status_of_proc is working.
+. /lib/lsb/init-functions
+
+do_start()
+{
+	su -s /bin/bash -c "$DAEMON start" otrs
+}
+
+do_stop()
+{
+	su -s /bin/bash -c "$DAEMON stop" otrs
+}
+
+case "$1" in
+  start)
+	do_start
+	;;
+  stop)
+	do_stop
+	;;
+  status)
+	su -s /bin/bash -c "$DAEMON status" otrs
+	;;
+  restart|force-reload)
+	do_stop
+	do_start
+	;;
+  *)
+	echo "Usage: $SCRIPTNAME {start|stop|status|restart}" >&2
+	exit 3
+	;;
+esac
+
+:

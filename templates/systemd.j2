@@ -1,0 +1,15 @@
+[Unit]
+Description=otrs Daemon
+Requires=mysql.service
+After=mysql.service
+
+[Service]
+Type=forking
+ExecStart={{ otrs_install_path }}/bin/otrs.Daemon.pl start
+ExecStop={{ otrs_install_path }}/bin/otrs.Daemon.pl stop
+TimeoutSec=30
+User={{ otrs_user }}
+Group={{ otrs_group }}
+
+[Install]
+WantedBy=multi-user.target
