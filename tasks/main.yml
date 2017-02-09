@@ -109,9 +109,6 @@
     - debug: msg="I will not copy the configuration file!"
   when: not otrs_config_stat.stat.exists
 
-- name: Set otrs permissions
-  command: "{{ otrs_install_path}}/bin/otrs.SetPermissions.pl --otrs-user={{ otrs_user }} --web-group={{ otrs_group }} --skip-regex=\"^/.procmailrc\""
-
 - name: SysV | OTRS Daemon
   template: src=sysvinit.j2 dest=/etc/init.d/otrs owner=root group=root mode=0755
   when: ansible_service_mgr != "systemd"
@@ -143,8 +140,37 @@
   copy: src={{ otrs_install_path }}/.procmailrc.dist dest={{ otrs_install_path }}/.procmailrc remote_src=True owner=root group=root mode=0644
   when: not otrs_procmailrc_stat.stat.exists
 
-- name: Fix .procmailrc permissions
-  file: path={{ otrs_install_path }}/.procmailrc owner=root group=root mode=0644
+- name: Set permissions
+  tree_permission:
+    root_path: "{{ otrs_install_path }}"
+    regexp:
+      - paths:
+          - ".*"
+        file_mode: "0664"
+        dir_mode: "2775"
+        file_owner: "{{ otrs_user }}"
+        file_group: "{{ otrs_group }}"
+        dir_owner: "{{ otrs_user }}"
+        dir_group: "{{ otrs_group }}"
+      - paths:
+          - "/"
+        dir_mode: "0755"
+        dir_owner: "{{ otrs_user }}"
+        dir_group: "{{ otrs_group }}"
+      - paths:
+          - "/.*\\.(pl|psgi|sh)"
+          - "/scripts/suse-rcotrs"
+        file_mode: "0770"
+        file_owner: "{{ otrs_user }}"
+        file_group: "{{ otrs_group }}"
+        do_dirs: false
+      - paths:
+          - "/.*\\.(git|tidyall|tx|settings|ssh|gpg|gnupg)"
+      - paths:
+          - "/.procmailrc"
+        file_mode: "0644"
+        file_owner: "root"
+        file_group: "root"
 
 - name: rsyslog
   copy: src=rsyslog_otrs.conf dest=/etc/rsyslog.d/otrs.conf owner=root group=root mode=0644
