@@ -2,6 +2,7 @@
 
 #### Variables
 
+* vhost_domain: The domain in the apache configuration (required)
 * vhost_user: User under which the vhost will run (default: otrs)
 * otrs_database: Name of the database used (default: otrs)
 * otrs_database_user: Name of the databaseuser (default: otrs)
