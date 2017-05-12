@@ -2,4 +2,3 @@ apache_mpm: prefork
 vhost_user_bash_files: true
 vhost_user_shell: "/bin/bash"
 mysql_optimization_version: 6
-

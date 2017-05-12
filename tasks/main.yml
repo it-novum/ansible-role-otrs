@@ -130,7 +130,9 @@
   when: ansible_service_mgr == "systemd"
 
 - name: Enable bash completion
-  lineinfile: line=". {{ otrs_install_path }}/.bash_completion" dest={{ vhost_directory }}/.bashrc
+  lineinfile:
+    line: ". {{ otrs_install_path }}/.bash_completion"
+    dest: "{{ otrs_install_path }}/.bashrc"
 
 - name: Check if .procmailrc exists
   stat: path={{ otrs_install_path }}/.procmailrc
