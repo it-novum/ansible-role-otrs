@@ -1,20 +1,16 @@
 - block:
   - name: Postfix
     include_role: name=postfix-smarthost
-    static: no
   when: "postfix_relayhost is defined"
 
 - name: MySQL
   include_role: name=mysql
-  static: no
 
 - name: Apache
   include_role: name=apache
-  static: no
 
 - name: Vhost
   include_role: name=vhost
-  static: no
   vars:
     use_perl: true
 
@@ -61,7 +57,6 @@
 
 - name: Database
   include_role: name=createdb
-  static: no
 
 - name: Check if otrs is already installed
   stat: path={{ otrs_install_path }}/Kernel
