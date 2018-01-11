@@ -39,6 +39,7 @@
     - libxml-parser-perl
     - libyaml-libyaml-perl
     - libdbd-mysql-perl
+    - libdatetime-perl
   when: ansible_pkg_mgr == "apt"
 
 - name: Fact | createdb
