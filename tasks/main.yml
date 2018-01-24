@@ -39,6 +39,8 @@
     - libxml-parser-perl
     - libyaml-libyaml-perl
     - libdbd-mysql-perl
+    - python-sqlalchemy
+    - python-mysqldb
   when: ansible_pkg_mgr == "apt"
 
 - name: Fact | createdb
@@ -69,11 +71,8 @@
 - fail: msg="otrs isn't installed and installation archive not found"
   when: not otrs_kernel_stat.stat.exists and not otrs_tar_file_stat.stat.exists
 
-- block:
-  - pause:
-      prompt: "If you press any key the installation of otrs will begin or abort with ctrl-c"
-  - name: Extract OTRS
-    unarchive: src={{ otrs_tar_file }} dest={{ otrs_install_path }} owner={{ otrs_user }} group={{ otrs_group }} extra_opts="--strip-components=1"
+- name: Extract OTRS
+  unarchive: src={{ otrs_tar_file }} dest={{ otrs_install_path }} owner={{ otrs_user }} group={{ otrs_group }} extra_opts="--strip-components=1"
   when: not otrs_kernel_stat.stat.exists
 
 - name: Check if apache config exists
@@ -95,14 +94,114 @@
   stat: path={{ otrs_install_path }}/Kernel/Config.pm
   register: otrs_config_stat
 
-- block:
-  - pause:
-      prompt: "The configuration file {{ otrs_install_path }}/Kernel/Config.pm doesn't exist. If you press enter I will create one, ctrc-c to abort"
-  - name: Create configuration
-    copy: remote_src=true src={{ otrs_install_path }}/Kernel/Config.pm.dist dest={{ otrs_install_path }}/Kernel/Config.pm owner={{ otrs_user }} group={{ otrs_group }} mode=0640
-  rescue:
-    - debug: msg="I will not copy the configuration file!"
+- name: Create configuration
+  copy:
+    remote_src: true
+    src: "{{ otrs_install_path }}/Kernel/Config.pm.dist"
+    dest: "{{ otrs_install_path }}/Kernel/Config.pm"
+    owner: "{{ otrs_user }}"
+    group: "{{ otrs_group }}"
+    mode: "0640"
   when: not otrs_config_stat.stat.exists
+
+- name: Set database configuration
+  lineinfile:
+    dest: "{{ otrs_install_path }}/Kernel/Config.pm"
+    backrefs: yes
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  with_items:
+    - regexp: "^(\\s*)\\$Self\\-\\>\\{DatabaseHost\\}\\s*=.*;$"
+      line: "\\1$Self->{DatabaseHost} = 'localhost';"
+    - regexp: "^(\\s*)\\$Self\\-\\>\\{Database\\}\\s*=.*;$"
+      line: "\\1$Self->{Database} = '{{ otrs_database }}';"
+    - regexp: "^(\\s*)\\$Self\\-\\>\\{DatabaseUser\\}\\s*=.*;$"
+      line: "\\1$Self->{DatabaseUser} = '{{ otrs_database_user }}';"
+    - regexp: "^(\\s*)\\$Self\\-\\>\\{DatabasePw\\}\\s*=.*;$"
+      line: "\\1$Self->{DatabasePw} = '{{ createdb_password }}';"
+
+- name: Check for ZZZAuto.pm
+  stat:
+    path: "{{ otrs_install_path }}/Kernel/Config/Files/ZZZAuto.pm"
+  register: stat_zzz
+
+- name: Create ZZZAuto.pm
+  template:
+    src: ZZZAuto.pm.j2
+    dest: "{{ otrs_install_path }}/Kernel/Config/Files/ZZZAuto.pm"
+    owner: "{{ otrs_user }}"
+    group: "{{ otrs_group }}"
+    mode: "0640"
+  when: not stat_zzz.stat.exists
+
+- name: Check if db exists
+  sqledit:
+    url: "mysql+mysqldb://localhost/INFORMATION_SCHEMA?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: TABLES
+    state: select
+    keys:
+      - TABLE_SCHEMA
+    columns:
+      - name: TABLE_SCHEMA
+        type: String
+        value: "{{ otrs_database }}"
+  register: otrsdb_check
+
+- block:
+    - name: Import schema
+      mysql_db:
+        name: "{{ otrs_database }}"
+        state: import
+        target: "{{ otrs_install_path }}/scripts/database/otrs-schema.mysql.sql"
+    - name: Import initial data
+      mysql_db:
+        name: "{{ otrs_database }}"
+        state: import
+        target: "{{ otrs_install_path }}/scripts/database/otrs-initial_insert.mysql.sql"
+    - name: Import post schema
+      mysql_db:
+        name: "{{ otrs_database }}"
+        state: import
+        target: "{{ otrs_install_path }}/scripts/database/otrs-schema-post.mysql.sql"
+  when: otrsdb_check.rows|length == 0
+
+- name: Check for root@localhost
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: users
+    state: select
+    keys:
+      - login
+      - pw
+    columns:
+      - name: login
+        type: String
+        value: "root@localhost"
+      - name: pw
+        type: String
+        value: "roK20XGbWEsSM"
+  register: otrs_check_user
+
+- name: Check if otrs_login_password is set
+  fail:
+    msg: "Please specify otrs_login_password to setup first user"
+  when: otrs_check_user.rows|length == 1 and (not otrs_login_password is defined)
+
+- name: Set password for root@localhost
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: users
+    state: present
+    keys:
+      - login
+    columns:
+      - name: login
+        type: String
+        value: "root@localhost"
+      - name: pw
+        type: String
+        value: "{{ otrs_login_password|hash('sha256') }}"
+  when: otrs_check_user.rows|length == 1
 
 - name: SysV | OTRS Daemon
   template: src=sysvinit.j2 dest=/etc/init.d/otrs owner=root group=root mode=0755
@@ -171,16 +270,9 @@
 
 - name: rsyslog
   copy: src=rsyslog_otrs.conf dest=/etc/rsyslog.d/otrs.conf owner=root group=root mode=0644
+  notify: restart rsyslog
 
-- name: restart services
+- name: start otrs
   service:
-   name: apache2
-   state: restarted
-  with_items:
-    - apache2
-    - mysql
-    - rsyslog
-    - otrs
-  ignore_errors: yes
-
-- debug: "msg=\"You should now be able to run the otrs installer. The database settings are:: DB Host: {{ createdb_host }} ; DB User: {{ createdb_user }} ; DB Password: {{ createdb_password }} ; DB Name: {{ createdb_database }}\""
+   name: otrs
+   state: started

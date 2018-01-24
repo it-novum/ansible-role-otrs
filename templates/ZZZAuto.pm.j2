@@ -1,0 +1,23 @@
+# OTRS config file (automatically generated)
+# VERSION:1.1
+package Kernel::Config::Files::ZZZAuto;
+use strict;
+use warnings;
+no warnings 'redefine';
+use utf8;
+sub Load {
+    my ($File, $Self) = @_;
+$Self->{'CloudServices::Disabled'} =  '0';
+delete $Self->{'PreferencesGroups'}->{'SpellDict'};
+$Self->{'CheckMXRecord'} =  '0';
+$Self->{'DefaultLanguage'} =  'de';
+delete $Self->{'NodeID'};
+$Self->{'FQDN'} =  '{{ ansible_fqdn }}';
+$Self->{'SystemID'} =  '{{ '%02d' % 100|random(seed=ansible_fqdn) }}';
+$Self->{'SecureMode'} =  1;
+{% if otrs_proxy is defined %}
+$Self->{'Package::Proxy'} =  '{{ otrs_proxy }}';
+$Self->{'WebUserAgent::Proxy'} =  '{{ otrs_proxy }}';
+{% endif %}
+}
+1;
