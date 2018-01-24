@@ -261,6 +261,14 @@
         file_group: "{{ otrs_group }}"
         do_dirs: false
       - paths:
+          - "/.bashrc"
+          - "/.bash_history"
+          - "/.viminfo"
+        file_mode: "0640"
+        file_owner: "{{ otrs_user }}"
+        file_group: "{{ otrs_group }}"
+        do_dirs: false
+      - paths:
           - "/.*\\.(git|tidyall|tx|settings|ssh|gpg|gnupg)"
       - paths:
           - "/.procmailrc"
