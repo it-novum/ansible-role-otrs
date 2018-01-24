@@ -41,6 +41,7 @@
     - libdbd-mysql-perl
     - python-sqlalchemy
     - python-mysqldb
+    - libdatetime-perl
   when: ansible_pkg_mgr == "apt"
 
 - name: Fact | createdb
