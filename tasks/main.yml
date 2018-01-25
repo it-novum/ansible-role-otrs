@@ -276,6 +276,15 @@
         file_mode: "0644"
         file_owner: "root"
         file_group: "root"
+      - paths:
+          - /var/log/.*
+          - /var/tmp/.*
+        file_mode: "0660"
+        file_owner: "{{ otrs_user }}"
+        file_group: "{{ otrs_group }}"
+        dir_mode: "2770"
+        dir_owner: "{{ otrs_user }}"
+        dir_group: "{{ otrs_group }}"
 
 - name: rsyslog
   copy: src=rsyslog_otrs.conf dest=/etc/rsyslog.d/otrs.conf owner=root group=root mode=0644
