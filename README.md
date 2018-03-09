@@ -12,6 +12,7 @@
 * otrs_group: Name of the group the webserver runs and the otrs_user is in (default: www-data)
 * otrs_tar_file: Local path to the otrs installation file (default: otrs.tar.bz2)
 * otrs_proxy: Configure otrs to use a proxy (only during the first run) (default: None)
+* otrs_timezone: Configure the default timezone in otrs (only during the first run) (default: Europe/Berlin)
 
 #### Required files
 
