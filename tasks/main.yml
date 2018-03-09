@@ -121,20 +121,6 @@
     - regexp: "^(\\s*)\\$Self\\-\\>\\{DatabasePw\\}\\s*=.*;$"
       line: "\\1$Self->{DatabasePw} = '{{ createdb_password }}';"
 
-- name: Check for ZZZAuto.pm
-  stat:
-    path: "{{ otrs_install_path }}/Kernel/Config/Files/ZZZAuto.pm"
-  register: stat_zzz
-
-- name: Create ZZZAuto.pm
-  template:
-    src: ZZZAuto.pm.j2
-    dest: "{{ otrs_install_path }}/Kernel/Config/Files/ZZZAuto.pm"
-    owner: "{{ otrs_user }}"
-    group: "{{ otrs_group }}"
-    mode: "0640"
-  when: not stat_zzz.stat.exists
-
 - name: Check if db exists
   sqledit:
     url: "mysql+mysqldb://localhost/INFORMATION_SCHEMA?read_default_file={{ vhost_directory }}/.my.cnf"
@@ -182,6 +168,75 @@
         type: String
         value: "roK20XGbWEsSM"
   register: otrs_check_user
+
+- name: Check if sysconfig_default table has been created
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: sysconfig_default
+    state: select
+    keys:
+      - name
+    columns:
+      - name: name
+        type: String
+        value: "SystemID"
+  register: systemd_id_default
+
+- name: Build sysconfig_default
+  command: /opt/otrs/bin/otrs.Console.pl Maint::Config::Rebuild
+  become: yes
+  become_user: otrs
+  when: systemd_id_default.rows|length == 0
+
+- name: Check for SystemID
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: sysconfig_modified
+    state: select
+    keys:
+      - name
+    columns:
+      - name: name
+        type: String
+        value: "SystemID"
+      - name: id
+        type: Integer
+  register: systemd_id
+
+- name: Set sysconfig proxy
+  include_tasks: sysconfig.yml
+  with_items:
+    - name: "Package::Proxy"
+      value: "{{ otrs_proxy }}"
+    - name: "WebUserAgent::Proxy"
+      value: "{{ otrs_proxy }}"
+  when: otrs_proxy is defined and systemd_id.rows|length == 0
+  notify: rebuild config
+
+- name: Set sysconfig
+  include_tasks: sysconfig.yml
+  with_items:
+    - name: "CloudServices::Disabled"
+      value: 1
+    - name: "CheckMXRecord"
+      value: 0
+    - name: "DefaultLanguage"
+      value: "de"
+    - name: "FQDN"
+      value: "{{ ansible_fqdn }}"
+    - name: "SecureMode"
+      value: 1
+    - name: "OTRSTimeZone"
+      value: "{{ otrs_timezone }}"
+    - name: "UserDefaultTimeZone"
+      value: "{{ otrs_timezone }}"
+    - name: "Frontend::AvatarEngine"
+      value: "None"
+    - name: "Secure::DisableBanner"
+      value: 1
+    - name: "SystemID"
+      value: "{{ '%02d' % 100|random(seed=ansible_fqdn) }}"
+  when: systemd_id.rows|length == 0
 
 - name: Check if otrs_login_password is set
   fail:

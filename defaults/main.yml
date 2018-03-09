@@ -6,3 +6,4 @@ otrs_user: otrs
 otrs_group: otrs
 vhost_user_home: /opt/otrs
 otrs_tar_file: "otrs.tar.bz2"
+otrs_timezone: "Europe/Berlin"

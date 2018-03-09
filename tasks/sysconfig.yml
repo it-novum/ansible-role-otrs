@@ -1,0 +1,52 @@
+- name: Get default id
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: sysconfig_default
+    state: select
+    keys:
+      - name
+    columns:
+      - name: name
+        type: String
+        value: "{{ item.name }}"
+      - name: id
+        type: Integer
+  register: default_data
+
+- name: Set sysconfig item
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: sysconfig_modified
+    state: present
+    keys:
+      - name
+    columns:
+      - name: name
+        type: String
+        value: "{{ item.name }}"
+      - name: sysconfig_default_id
+        type: Integer
+        value: "{{ default_data.rows[0].id }}"
+      - name: is_valid
+        type: Integer
+        value: "1"
+      - name: user_modification_active
+        type: Integer
+        value: "0"
+      - name: effective_value
+        type: String
+        value: "--- {% if item.value|int(-1203232) != -1203232 %}'{{ item.value }}'{% else %}{{ item.value }}{% endif %}"
+      - name: create_time
+        type: DateTime
+        value: now
+      - name: change_time
+        type: DateTime
+        value: now
+      - name: create_by
+        type: Integer
+        value: "1"
+      - name: change_by
+        type: Integer
+        value: "1"
+  register: default_data
+  notify: rebuild config
