@@ -35,7 +35,7 @@
         value: "0"
       - name: effective_value
         type: String
-        value: "--- {% if item.value|int(-1203232) != -1203232 %}'{{ item.value }}'{% else %}{{ item.value }}{% endif %}"
+        value: "--- {% if item.value|int(0) != 0 %}'{{ item.value }}'{% else %}{{ item.value }}{% endif %}\n"
       - name: create_time
         type: DateTime
         value: now
