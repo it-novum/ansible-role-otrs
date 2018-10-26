@@ -13,6 +13,21 @@
         type: Integer
   register: default_data
 
+- name: Get default version id
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: sysconfig_default_version
+    state: select
+    keys:
+      - sysconfig_default_id
+    columns:
+      - name: sysconfig_default_id
+        type: Integer
+        value: "{{ default_data.rows[0].id }}"
+      - name: id
+        type: Integer
+  register: default_version_data
+
 - name: Set sysconfig item
   sqledit:
     url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
@@ -48,5 +63,42 @@
       - name: change_by
         type: Integer
         value: "1"
-  register: default_data
-  notify: rebuild config
+
+- name: Add sysconfig version item
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: sysconfig_modified_version
+    state: insert
+    keys:
+      - name
+    columns:
+      - name: name
+        type: String
+        value: "{{ item.name }}"
+      - name: sysconfig_default_version_id
+        type: Integer
+        value: "{{ default_version_data.rows[0].id }}"
+      - name: is_valid
+        type: Integer
+        value: "1"
+      - name: user_modification_active
+        type: Integer
+        value: "0"
+      - name: effective_value
+        type: String
+        value: "--- {% if item.value|int(0) != 0 %}'{{ item.value }}'{% else %}{{ item.value }}{% endif %}\n"
+      - name: reset_to_default
+        type: Integer
+        value: "0"
+      - name: create_time
+        type: DateTime
+        value: now
+      - name: change_time
+        type: DateTime
+        value: now
+      - name: create_by
+        type: Integer
+        value: "1"
+      - name: change_by
+        type: Integer
+        value: "1"

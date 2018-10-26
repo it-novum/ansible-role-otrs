@@ -18,30 +18,32 @@
   file: path={{ otrs_install_path }} owner={{ otrs_user }} group={{ otrs_group }} mode=0755 state=directory
 
 - name: APT | Install dependendies
-  apt: name={{ item }}
-  with_items:
-    - libarchive-zip-perl
-    - libcrypt-eksblowfish-perl
-    - libcrypt-ssleay-perl
-    - libdbd-pg-perl
-    - libencode-hanextra-perl
-    - libio-socket-ssl-perl
-    - libjson-xs-perl
-    - libmail-imapclient-perl
-    - libio-socket-ssl-perl
-    - libnet-dns-perl
-    - libnet-ldap-perl
-    - libtemplate-perl
-    - libtemplate-perl
-    - libtext-csv-xs-perl
-    - libxml-libxml-perl
-    - libxml-libxslt-perl
-    - libxml-parser-perl
-    - libyaml-libyaml-perl
-    - libdbd-mysql-perl
-    - python-sqlalchemy
-    - python-mysqldb
-    - libdatetime-perl
+  apt:
+    name: "{{ packages }}"
+  vars:
+    packages:
+      - libarchive-zip-perl
+      - libcrypt-eksblowfish-perl
+      - libcrypt-ssleay-perl
+      - libdbd-pg-perl
+      - libencode-hanextra-perl
+      - libio-socket-ssl-perl
+      - libjson-xs-perl
+      - libmail-imapclient-perl
+      - libio-socket-ssl-perl
+      - libnet-dns-perl
+      - libnet-ldap-perl
+      - libtemplate-perl
+      - libtemplate-perl
+      - libtext-csv-xs-perl
+      - libxml-libxml-perl
+      - libxml-libxslt-perl
+      - libxml-parser-perl
+      - libyaml-libyaml-perl
+      - libdbd-mysql-perl
+      - python-sqlalchemy
+      - python-mysqldb
+      - libdatetime-perl
   when: ansible_pkg_mgr == "apt"
 
 - name: Fact | createdb
@@ -211,21 +213,18 @@
     - name: "WebUserAgent::Proxy"
       value: "{{ otrs_proxy }}"
   when: otrs_proxy is defined and systemd_id.rows|length == 0
-  notify: rebuild config
 
 - name: Set sysconfig
   include_tasks: sysconfig.yml
   with_items:
-    - name: "CloudServices::Disabled"
-      value: 1
     - name: "CheckMXRecord"
-      value: 0
+      value: "0"
     - name: "DefaultLanguage"
       value: "de"
     - name: "FQDN"
       value: "{{ ansible_fqdn }}"
     - name: "SecureMode"
-      value: 1
+      value: "1"
     - name: "OTRSTimeZone"
       value: "{{ otrs_timezone }}"
     - name: "UserDefaultTimeZone"
@@ -233,10 +232,22 @@
     - name: "Frontend::AvatarEngine"
       value: "None"
     - name: "Secure::DisableBanner"
-      value: 1
+      value: "1"
     - name: "SystemID"
       value: "{{ '%02d' % 100|random(seed=ansible_fqdn) }}"
+    - name: "Package::RepositoryList"
+      value: "\nhttp://ftp.otrs.org/pub/otrs/itsm/packages6/: ITSM 6 Packages"
   when: systemd_id.rows|length == 0
+
+- name: rebuild config
+  command: /opt/otrs/bin/otrs.Console.pl Maint::Config::Rebuild
+  become: yes
+  become_user: otrs
+
+- name: clear cache
+  command: /opt/otrs/bin/otrs.Console.pl Maint::Cache::Delete
+  become: yes
+  become_user: otrs
 
 - name: Check if otrs_login_password is set
   fail:

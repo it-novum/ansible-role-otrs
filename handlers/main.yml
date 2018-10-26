@@ -2,8 +2,3 @@
   service:
     name: rsyslog
     state: restarted
-
-- name: rebuild config
-  command: /opt/otrs/bin/otrs.Console.pl Maint::Config::Rebuild
-  become: yes
-  become_user: otrs
