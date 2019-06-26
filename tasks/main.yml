@@ -1,21 +1,33 @@
-- block:
-  - name: Postfix
-    include_role: name=postfix-smarthost
+- name: systemtools
+  import_role:
+    name: systemtools
+
+- name: Postfix
+  include_role:
+    name: postfix-smarthost
   when: "postfix_relayhost is defined"
 
 - name: MySQL
-  include_role: name=mysql
+  include_role:
+    name: mysql
 
 - name: Apache
-  include_role: name=apache
+  include_role:
+    name: apache
 
 - name: Vhost
-  include_role: name=vhost
+  include_role:
+    name: vhost
   vars:
     use_perl: true
 
 - name: Set otrs folder permissions
-  file: path={{ otrs_install_path }} owner={{ otrs_user }} group={{ otrs_group }} mode=0755 state=directory
+  file:
+    path: "{{ otrs_install_path }}"
+    owner: "{{ otrs_user }}"
+    group: "{{ otrs_group }}"
+    mode: 0755
+    state: directory
 
 - name: APT | Install dependendies
   apt:
@@ -61,40 +73,58 @@
       value: "{{ otrs_database }}"
 
 - name: Database
-  include_role: name=createdb
+  include_role:
+    name: createdb
 
 - name: Check if otrs is already installed
-  stat: path={{ otrs_install_path }}/Kernel
+  stat:
+    path: "{{ otrs_install_path }}/Kernel"
   register: otrs_kernel_stat
 
 - name: check if otrs installation archive exists
-  local_action: stat path={{otrs_tar_file}}
+  local_action: "stat path={{otrs_tar_file}}"
   register: otrs_tar_file_stat
 
-- fail: msg="otrs isn't installed and installation archive not found"
+- fail:
+    msg: "otrs isn't installed and installation archive not found"
   when: not otrs_kernel_stat.stat.exists and not otrs_tar_file_stat.stat.exists
 
 - name: Extract OTRS
-  unarchive: src={{ otrs_tar_file }} dest={{ otrs_install_path }} owner={{ otrs_user }} group={{ otrs_group }} extra_opts="--strip-components=1"
+  unarchive:
+    src: "{{ otrs_tar_file }}"
+    dest: "{{ otrs_install_path }}"
+    owner: "{{ otrs_user }}"
+    group: "{{ otrs_group }}"
+    extra_opts: "--strip-components=1"
   when: not otrs_kernel_stat.stat.exists
 
 - name: Check if apache config exists
-  stat: path={{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf
+  stat:
+    path: "{{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf"
   register: apache_otrs_conf
 
 - name: Copy apache configuration
-  synchronize: mode=pull src={{ otrs_install_path }}/scripts/apache2-httpd.include.conf dest={{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf
+  synchronize:
+    mode: pull
+    src: "{{ otrs_install_path }}/scripts/apache2-httpd.include.conf"
+    dest: "{{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf"
   delegate_to: "{{inventory_hostname}}"
   when: not apache_otrs_conf.stat.exists
 
 - name: Delete broken config from file
-  lineinfile: dest={{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf state=absent line="MaxRequestsPerChild 4000"
+  lineinfile:
+    dest: "{{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf"
+    state: absent
+    line: "MaxRequestsPerChild 4000"
 
 - name: OTRS redirect to index.pl
-  copy: src=redirect_otrs.conf dest={{ apache_sites_include }}/{{ vhost_domain }}_redirect.conf
+  copy:
+    src: redirect_otrs.conf
+    dest: "{{ apache_sites_include }}/{{ vhost_domain }}_redirect.conf"
 
 - name: Check if otrs configuration already exists
-  stat: path={{ otrs_install_path }}/Kernel/Config.pm
+  stat:
+    path: "{{ otrs_install_path }}/Kernel/Config.pm"
   register: otrs_config_stat
 
 - name: Create configuration
@@ -271,23 +301,40 @@
   when: otrs_check_user.rows|length == 1
 
 - name: SysV | OTRS Daemon
-  template: src=sysvinit.j2 dest=/etc/init.d/otrs owner=root group=root mode=0755
+  template:
+    src: sysvinit.j2
+    dest: /etc/init.d/otrs
+    owner: root
+    group: root
+    mode: 0755
   when: ansible_service_mgr != "systemd"
 
 - name: SystemD | OTRS Daemon
-  template: src=systemd.j2 dest=/etc/systemd/system/otrs.service owner=root group=root mode=0644
+  template:
+    src: systemd.j2
+    dest: /etc/systemd/system/otrs.service
+    owner: root
+    group: root
+    mode: 0644
   when: ansible_service_mgr == "systemd"
 
 - name: SysV | enable otrs daemon
-  service: name=otrs enabled=yes
+  service:
+    name: otrs
+    enabled: yes
   when: ansible_service_mgr != "systemd"
 
 - name: SystemD | Remove old init scripts
-  file: path=/etc/init.d/otrs state=absent
+  file:
+    path: /etc/init.d/otrs
+    state: absent
   when: ansible_service_mgr == "systemd"
 
 - name: SystemD | enable otrs daemon
-  systemd: name=otrs daemon_reload=yes enabled=yes
+  systemd:
+    name: otrs
+    daemon_reload: yes
+    enabled: yes
   when: ansible_service_mgr == "systemd"
 
 - name: Enable bash completion
@@ -296,11 +343,18 @@
     dest: "{{ otrs_install_path }}/.bashrc"
 
 - name: Check if .procmailrc exists
-  stat: path={{ otrs_install_path }}/.procmailrc
+  stat:
+    path: "{{ otrs_install_path }}/.procmailrc"
   register: otrs_procmailrc_stat
 
 - name: Configure procmail
-  copy: src={{ otrs_install_path }}/.procmailrc.dist dest={{ otrs_install_path }}/.procmailrc remote_src=True owner=root group=root mode=0644
+  copy:
+    src: "{{ otrs_install_path }}/.procmailrc.dist"
+    dest: "{{ otrs_install_path }}/.procmailrc"
+    remote_src: yes
+    owner: root
+    group: root
+    mode: 0644
   when: not otrs_procmailrc_stat.stat.exists
 
 - name: Set permissions
@@ -353,7 +407,12 @@
         dir_group: "{{ otrs_group }}"
 
 - name: rsyslog
-  copy: src=rsyslog_otrs.conf dest=/etc/rsyslog.d/otrs.conf owner=root group=root mode=0644
+  copy:
+    src: rsyslog_otrs.conf
+    dest: /etc/rsyslog.d/otrs.conf
+    owner: root
+    group: root
+    mode: 0644
   notify: restart rsyslog
 
 - name: start otrs
