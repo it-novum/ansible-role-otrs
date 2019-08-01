@@ -1,0 +1,77 @@
+- name: systemtools
+  import_role:
+    name: systemtools
+
+- name: Postfix
+  include_role:
+    name: postfix-smarthost
+  when: "postfix_relayhost is defined"
+
+- name: MySQL
+  include_role:
+    name: mysql
+
+- name: Apache
+  include_role:
+    name: apache
+
+- name: Vhost
+  include_role:
+    name: vhost
+  vars:
+    use_perl: true
+
+- name: Set otrs folder permissions
+  file:
+    path: "{{ otrs_install_path }}"
+    owner: "{{ otrs_user }}"
+    group: "{{ otrs_group }}"
+    mode: 0755
+    state: directory
+
+- name: APT | Install dependendies
+  apt:
+    name: "{{ packages }}"
+  vars:
+    packages:
+      - libarchive-zip-perl
+      - libcrypt-eksblowfish-perl
+      - libcrypt-ssleay-perl
+      - libdbd-pg-perl
+      - libencode-hanextra-perl
+      - libio-socket-ssl-perl
+      - libjson-xs-perl
+      - libmail-imapclient-perl
+      - libio-socket-ssl-perl
+      - libnet-dns-perl
+      - libnet-ldap-perl
+      - libtemplate-perl
+      - libtemplate-perl
+      - libtext-csv-xs-perl
+      - libxml-libxml-perl
+      - libxml-libxslt-perl
+      - libxml-parser-perl
+      - libyaml-libyaml-perl
+      - libdbd-mysql-perl
+      - python-sqlalchemy
+      - python-mysqldb
+      - libdatetime-perl
+  when: ansible_pkg_mgr == "apt"
+
+- name: Fact | createdb
+  set_fact: "{{item.key}}={{item.value}}"
+  with_items:
+    - key: "createdb_dbs"
+      value: "mysql"
+    - key: "createdb_config"
+      value: "{{ vhost_directory }}/.my.cnf"
+    - key: "createdb_user"
+      value: "{{ otrs_database_user }}"
+    - key: "createdb_host"
+      value: "localhost"
+    - key: "createdb_database"
+      value: "{{ otrs_database }}"
+
+- name: Database
+  include_role:
+    name: createdb

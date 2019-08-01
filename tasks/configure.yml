@@ -1,0 +1,104 @@
+- name: SystemD | OTRS Daemon
+  template:
+    src: systemd.j2
+    dest: /etc/systemd/system/otrs.service
+    owner: root
+    group: root
+    mode: 0644
+  when: ansible_service_mgr == "systemd"
+
+- name: SystemD | Remove old init scripts
+  file:
+    path: /etc/init.d/otrs
+    state: absent
+  when: ansible_service_mgr == "systemd"
+
+- name: SystemD | enable otrs daemon
+  systemd:
+    name: otrs
+    daemon_reload: yes
+    enabled: yes
+  when: ansible_service_mgr == "systemd"
+
+- name: Enable bash completion
+  lineinfile:
+    line: ". {{ otrs_install_path }}/.bash_completion"
+    dest: "{{ otrs_install_path }}/.bashrc"
+
+- name: Check if .procmailrc exists
+  stat:
+    path: "{{ otrs_install_path }}/.procmailrc"
+  register: otrs_procmailrc_stat
+
+- name: Configure procmail
+  copy:
+    src: "{{ otrs_install_path }}/.procmailrc.dist"
+    dest: "{{ otrs_install_path }}/.procmailrc"
+    remote_src: yes
+    owner: root
+    group: root
+    mode: 0644
+  when: not otrs_procmailrc_stat.stat.exists
+
+- name: Set permissions
+  tree_permission:
+    root_path: "{{ otrs_install_path }}"
+    regexp:
+      - paths:
+          - ".*"
+        file_mode: "0660"
+        dir_mode: "2775"
+        file_owner: "{{ otrs_user }}"
+        file_group: "{{ otrs_group }}"
+        dir_owner: "{{ otrs_user }}"
+        dir_group: "{{ otrs_group }}"
+      - paths:
+          - "/"
+        dir_mode: "0755"
+        dir_owner: "{{ otrs_user }}"
+        dir_group: "{{ otrs_group }}"
+      - paths:
+          - "/.*\\.(pl|psgi|sh)"
+          - "/scripts/suse-rcotrs"
+        file_mode: "0770"
+        file_owner: "{{ otrs_user }}"
+        file_group: "{{ otrs_group }}"
+        do_dirs: false
+      - paths:
+          - "/.bashrc"
+          - "/.bash_history"
+          - "/.viminfo"
+        file_mode: "0640"
+        file_owner: "{{ otrs_user }}"
+        file_group: "{{ otrs_group }}"
+        do_dirs: false
+      - paths:
+          - "/.*\\.(git|tidyall|tx|settings|ssh|gpg|gnupg)"
+      - paths:
+          - "/.procmailrc"
+        file_mode: "0644"
+        file_owner: "root"
+        file_group: "root"
+      - paths:
+          - /var/log/.*
+          - /var/tmp/.*
+        file_mode: "0660"
+        file_owner: "{{ otrs_user }}"
+        file_group: "{{ otrs_group }}"
+        dir_mode: "2770"
+        dir_owner: "{{ otrs_user }}"
+        dir_group: "{{ otrs_group }}"
+
+- name: rsyslog
+  copy:
+    src: rsyslog_otrs.conf
+    dest: /etc/rsyslog.d/otrs.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart rsyslog
+
+- name: start otrs
+  service:
+   name: otrs
+   state: started

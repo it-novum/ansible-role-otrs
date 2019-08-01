@@ -7,3 +7,4 @@ otrs_group: otrs
 vhost_user_home: /opt/otrs
 otrs_tar_file: "otrs.tar.bz2"
 otrs_timezone: "Europe/Berlin"
+install_mode: "configure"

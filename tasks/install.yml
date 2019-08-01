@@ -1,0 +1,211 @@
+
+- name: Extract OTRS
+  unarchive:
+    src: "{{ otrs_tar_file }}"
+    dest: "{{ otrs_install_path }}"
+    owner: "{{ otrs_user }}"
+    group: "{{ otrs_group }}"
+    extra_opts: "--strip-components=1"
+  when: not otrs_kernel_stat.stat.exists
+
+- name: Check if apache config exists
+  stat:
+    path: "{{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf"
+  register: apache_otrs_conf
+
+- name: Copy apache configuration
+  synchronize:
+    mode: pull
+    src: "{{ otrs_install_path }}/scripts/apache2-httpd.include.conf"
+    dest: "{{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf"
+  delegate_to: "{{inventory_hostname}}"
+  when: not apache_otrs_conf.stat.exists
+
+- name: Delete broken config from file
+  lineinfile:
+    dest: "{{ apache_sites_include }}/{{ vhost_domain }}_otrs.conf"
+    state: absent
+    line: "MaxRequestsPerChild 4000"
+
+- name: OTRS redirect to index.pl
+  copy:
+    src: redirect_otrs.conf
+    dest: "{{ apache_sites_include }}/{{ vhost_domain }}_redirect.conf"
+
+- name: Check if otrs configuration already exists
+  stat:
+    path: "{{ otrs_install_path }}/Kernel/Config.pm"
+  register: otrs_config_stat
+
+- name: Create configuration
+  copy:
+    remote_src: true
+    src: "{{ otrs_install_path }}/Kernel/Config.pm.dist"
+    dest: "{{ otrs_install_path }}/Kernel/Config.pm"
+    owner: "{{ otrs_user }}"
+    group: "{{ otrs_group }}"
+    mode: "0640"
+  when: not otrs_config_stat.stat.exists
+
+- name: Set database configuration
+  lineinfile:
+    dest: "{{ otrs_install_path }}/Kernel/Config.pm"
+    backrefs: yes
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  with_items:
+    - regexp: "^(\\s*)\\$Self\\-\\>\\{DatabaseHost\\}\\s*=.*;$"
+      line: "\\1$Self->{DatabaseHost} = 'localhost';"
+    - regexp: "^(\\s*)\\$Self\\-\\>\\{Database\\}\\s*=.*;$"
+      line: "\\1$Self->{Database} = '{{ otrs_database }}';"
+    - regexp: "^(\\s*)\\$Self\\-\\>\\{DatabaseUser\\}\\s*=.*;$"
+      line: "\\1$Self->{DatabaseUser} = '{{ otrs_database_user }}';"
+    - regexp: "^(\\s*)\\$Self\\-\\>\\{DatabasePw\\}\\s*=.*;$"
+      line: "\\1$Self->{DatabasePw} = '{{ createdb_password }}';"
+
+- name: Check if db exists
+  sqledit:
+    url: "mysql+mysqldb://localhost/INFORMATION_SCHEMA?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: TABLES
+    state: select
+    keys:
+      - TABLE_SCHEMA
+    columns:
+      - name: TABLE_SCHEMA
+        type: String
+        value: "{{ otrs_database }}"
+  register: otrsdb_check
+
+- block:
+    - name: Import schema
+      mysql_db:
+        name: "{{ otrs_database }}"
+        state: import
+        target: "{{ otrs_install_path }}/scripts/database/otrs-schema.mysql.sql"
+    - name: Import initial data
+      mysql_db:
+        name: "{{ otrs_database }}"
+        state: import
+        target: "{{ otrs_install_path }}/scripts/database/otrs-initial_insert.mysql.sql"
+    - name: Import post schema
+      mysql_db:
+        name: "{{ otrs_database }}"
+        state: import
+        target: "{{ otrs_install_path }}/scripts/database/otrs-schema-post.mysql.sql"
+  when: otrsdb_check.rows|length == 0
+
+- name: Check for root@localhost
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: users
+    state: select
+    keys:
+      - login
+      - pw
+    columns:
+      - name: login
+        type: String
+        value: "root@localhost"
+      - name: pw
+        type: String
+        value: "roK20XGbWEsSM"
+  register: otrs_check_user
+
+- name: Check if sysconfig_default table has been created
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: sysconfig_default
+    state: select
+    keys:
+      - name
+    columns:
+      - name: name
+        type: String
+        value: "SystemID"
+  register: systemd_id_default
+
+- name: Build sysconfig_default
+  command: /opt/otrs/bin/otrs.Console.pl Maint::Config::Rebuild
+  become: yes
+  become_user: otrs
+  when: systemd_id_default.rows|length == 0
+
+- name: Check for SystemID
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: sysconfig_modified
+    state: select
+    keys:
+      - name
+    columns:
+      - name: name
+        type: String
+        value: "SystemID"
+      - name: id
+        type: Integer
+  register: systemd_id
+
+- name: Set sysconfig proxy
+  include_tasks: sysconfig.yml
+  with_items:
+    - name: "Package::Proxy"
+      value: "{{ otrs_proxy }}"
+    - name: "WebUserAgent::Proxy"
+      value: "{{ otrs_proxy }}"
+  when: otrs_proxy is defined and systemd_id.rows|length == 0
+
+- name: Set sysconfig
+  include_tasks: sysconfig.yml
+  with_items:
+    - name: "CheckMXRecord"
+      value: "0"
+    - name: "DefaultLanguage"
+      value: "de"
+    - name: "FQDN"
+      value: "{{ ansible_fqdn }}"
+    - name: "SecureMode"
+      value: "1"
+    - name: "OTRSTimeZone"
+      value: "{{ otrs_timezone }}"
+    - name: "UserDefaultTimeZone"
+      value: "{{ otrs_timezone }}"
+    - name: "Frontend::AvatarEngine"
+      value: "None"
+    - name: "Secure::DisableBanner"
+      value: "1"
+    - name: "SystemID"
+      value: "{{ '%02d' % 100|random(seed=ansible_fqdn) }}"
+    - name: "Package::RepositoryList"
+      value: "\nhttp://ftp.otrs.org/pub/otrs/itsm/packages6/: ITSM 6 Packages"
+  when: systemd_id.rows|length == 0
+
+- name: rebuild config
+  command: /opt/otrs/bin/otrs.Console.pl Maint::Config::Rebuild
+  become: yes
+  become_user: otrs
+
+- name: clear cache
+  command: /opt/otrs/bin/otrs.Console.pl Maint::Cache::Delete
+  become: yes
+  become_user: otrs
+
+- name: Check if otrs_login_password is set
+  fail:
+    msg: "Please specify otrs_login_password to setup first user"
+  when: otrs_check_user.rows|length == 1 and (not otrs_login_password is defined)
+
+- name: Set password for root@localhost
+  sqledit:
+    url: "mysql+mysqldb://localhost/{{ otrs_database }}?read_default_file={{ vhost_directory }}/.my.cnf"
+    table: users
+    state: present
+    keys:
+      - login
+    columns:
+      - name: login
+        type: String
+        value: "root@localhost"
+      - name: pw
+        type: String
+        value: "{{ otrs_login_password|hash('sha256') }}"
+  when: otrs_check_user.rows|length == 1
