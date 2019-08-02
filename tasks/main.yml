@@ -11,10 +11,10 @@
     msg: "otrs installation archive not found"
   when: not otrs_kernel_stat.stat.exists and not otrs_tar_file_stat.stat.exists and install_mode == "install"
 
-- name: Dependencies
+- name: Prepare
   include_tasks:
-    file: depends.yml
-  when: install_mode == "configure" or install_mode == "depends" or install_mode == "install"
+    file: prepare.yml
+  when: install_mode == "configure" or install_mode == "prepare" or install_mode == "install"
 
 - name: Install
   include_tasks:
