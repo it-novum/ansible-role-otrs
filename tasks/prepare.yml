@@ -53,8 +53,7 @@
       - libxml-parser-perl
       - libyaml-libyaml-perl
       - libdbd-mysql-perl
-      - python-sqlalchemy
-      - python-mysqldb
+      - libmoo-perl
       - libdatetime-perl
   when: ansible_pkg_mgr == "apt"
 
