@@ -177,6 +177,8 @@
       value: "{{ '%02d' % 100|random(seed=ansible_fqdn) }}"
     - name: "Package::RepositoryList"
       value: "\nhttp://ftp.otrs.org/pub/otrs/itsm/packages6/: ITSM 6 Packages"
+    - name: "SendmailNotificationEnvelopeFrom::FallbackToEmailFrom"
+      value: "1"
   when: systemd_id.rows|length == 0
 
 - name: rebuild config
