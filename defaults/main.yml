@@ -5,6 +5,6 @@ otrs_install_path: /opt/otrs
 otrs_user: otrs
 otrs_group: otrs
 vhost_user_home: /opt/otrs
-otrs_tar_file: "otrs.tar.bz2"
+otrs_tar_file: "otrs.tar.gz"
 otrs_timezone: "Europe/Berlin"
 install_mode: "configure"
