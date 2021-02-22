@@ -176,7 +176,11 @@
     - name: "SystemID"
       value: "{{ '%02d' % 100|random(seed=ansible_fqdn) }}"
     - name: "Package::RepositoryList"
-      value: "\nhttp://ftp.otrs.org/pub/otrs/itsm/packages6/: ITSM 6 Packages"
+      value: "\nhttps://download.znuny.org/releases/itsm/packages6/: ITSM 6 Packages"
+    - name: "Package::RepositoryRoot"
+      value: |
+        ---
+        - https://download.znuny.org/releases/misc/packages/repository.xml
     - name: "SendmailNotificationEnvelopeFrom::FallbackToEmailFrom"
       value: "1"
   when: systemd_id.rows|length == 0
