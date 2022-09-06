@@ -55,6 +55,7 @@
       - libdbd-mysql-perl
       - libmoo-perl
       - libdatetime-perl
+      - libdata-uuid-perl
   when: ansible_pkg_mgr == "apt"
 
 - name: Fact | createdb
